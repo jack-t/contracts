@@ -60,9 +60,6 @@ type int|parity[got_parity]|bounds[0, 10]; // has a parity check (got_parity bei
 
 identifier
 integer
-float
-string
-char
 
 ## Keywords
 type
