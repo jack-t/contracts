@@ -1,7 +1,7 @@
 use regex::Regex;
-use std::str::Chars;
+use lazy_static::*;
 
-#[derive(Clone)]
+#[derive(PartialEq, Clone, Debug)]
 pub enum Token {
 	KeyType,
 	KeyFn,
@@ -15,8 +15,8 @@ pub enum Token {
 	KeyWhile,
 	KeyIf,
 	Id(String),
-	Integer(u64),
-	Float(f64),
+	FloatLiteral(f64),
+	IntLiteral(u64),
 	StringLiteral(String),
 	Char(char),
 	OpPlus,
@@ -33,8 +33,6 @@ pub enum Token {
 	OpGreaterOrEqual,
 	OpLeftParen,
 	OpRightParen,
-	SymDoubleQuote,
-	SymSingleQuote,
 	SymSemicolon,
 	SymComma,
 	SymPipe,
@@ -63,28 +61,53 @@ impl Lexer {
 				lex_literal("return", Token::KeyReturn),
 				lex_literal("while", Token::KeyWhile),
 				lex_literal("if", Token::KeyIf),
+				Box::new(lex_id),
+				Box::new(lex_float_lit), // this comes before int_lit because the float regex is greedy
+				Box::new(lex_int_lit),
+				Box::new(lex_string_lit),
+				Box::new(lex_char),
+				lex_literal("\\+", Token::OpPlus),
+				lex_literal("\\-", Token::OpMinus),
+				lex_literal("\\*", Token::OpStar),
+				lex_literal("/", Token::OpSlash),
+				lex_literal("%", Token::OpPercent),
+				lex_literal("==", Token::OpEquality),
+				lex_literal("=", Token::OpAssign),
+				lex_literal("!=", Token::OpInequality),
+				lex_literal("<=", Token::OpLessOrEqual), // order matters with these tokens
+				lex_literal("<", Token::OpLess),
+				lex_literal(">=", Token::OpGreaterOrEqual),
+				lex_literal(">", Token::OpGreater),
+				lex_literal("\\(", Token::OpLeftParen),
+				lex_literal("\\)", Token::OpRightParen),
+				lex_literal(";", Token::SymSemicolon),
+				lex_literal(",", Token::SymComma),
+				lex_literal("\\|", Token::SymPipe),
+				lex_literal("\\]", Token::SymRightBracket),
+				lex_literal("\\[", Token::SymLeftBracket),
+
 			],
 		}
 	}
 
-	pub fn lex(&self, code: &mut str) -> Vec<Token> {
+	pub fn lex(&self, code: &str) -> Vec<Token> {
 		let mut ret = Vec::new();
-		let mut chars = code.chars();
-		while code.len() > 0 {
-			if let Some(tok) = self.tokenize(&mut chars) {
+		let mut offset = 0;
+		while (&code[offset..]).trim().len() > 0 {
+			if let Some((tok, adv)) = self.tokenize(&code[offset..]) {
 				ret.push(tok);
+				offset += adv;
 			} else {
-				panic!("Error during tokenization, code starting here: {}", code);
+				panic!("Couldn't tokenize code starting here: '{}'", &code[offset..]);
 			}
 		}
 		ret
 	}
 
-	fn tokenize(&self, code: &mut Chars) -> Option<Token> {
-		for &prod in self.producers {
-			if let Some((tok, offset)) = prod(code.as_str()) {
-				code.skip(offset);
-				return Some(tok);
+	fn tokenize(&self, code: &str) -> Option<(Token, usize)> {
+		for prod in &self.producers {
+			if let Some(tuple) = prod(code) {
+				return Some(tuple);
 			}
 		}
 		None
@@ -93,10 +116,10 @@ impl Lexer {
 
 fn lex_literal(lit: &'static str, tok: Token) -> Box<TokenProducer> {
 	Box::new(move |code: &str| {
-		let regex = Regex::new(((r"^\s*(?P<cap>".to_string() + lit).to_string() + ">.*").as_str()).unwrap();
-		if let Some(captures) = regex.captures(code) {
-			match captures.name("cap") {
-				Some(cap) => Some((tok.clone(), cap.as_str().len())),
+		let regex = Regex::new(((r"^\s*(?P<cap>".to_string() + lit).to_string() + ").*").as_str()).unwrap();
+		if let Some(caps) = regex.captures(code) {
+			match caps.name("cap") {
+				Some(mat) => Some((tok.clone(), mat.end())),
 				_ => unreachable!()
 			}
 		} else {
@@ -105,17 +128,273 @@ fn lex_literal(lit: &'static str, tok: Token) -> Box<TokenProducer> {
 	})
 }
 
+fn lex_id(code: &str) -> Option<(Token, usize)> {
+	lazy_static! {
+		static ref RE: Regex = Regex::new(r"^\s*(?P<cap>_*[a-zA-Z]+\w+).*").unwrap();
+	}
+
+	if let Some(caps) = RE.captures(code) {
+		match caps.name("cap") {
+			Some(mat) => Some((Token::Id(mat.as_str().to_string()), mat.end())),
+			_ => unreachable!() // because it captured something and there's only one capture group
+		}
+	} else {
+		None
+	}
+}
+
+fn lex_int_lit(code: &str) -> Option<(Token, usize)> {
+	lazy_static! {
+		static ref RE: Regex = Regex::new(r"^\s*(?P<cap>\d+).*").unwrap();
+	}
+
+	if let Some(caps) = RE.captures(code) {
+		match caps.name("cap") {
+			Some(mat) => Some((Token::IntLiteral(mat.as_str().parse::<u64>().unwrap()), mat.end())),
+			_ => unreachable!() // because it captured something and there's only one capture group
+		}
+	} else {
+		None
+	}
+}
+
+fn lex_float_lit(code: &str) -> Option<(Token, usize)> {
+	lazy_static! {
+		static ref RE: Regex = Regex::new(r"^\s*(?P<cap>\d+\.\d+).*").unwrap();
+	}
+
+	if let Some(caps) = RE.captures(code) {
+		match caps.name("cap") {
+			Some(mat) => Some((Token::FloatLiteral(mat.as_str().parse::<f64>().unwrap()), mat.end())),
+			_ => unreachable!() // because it captured something and there's only one capture group
+		}
+	} else {
+		None
+	}
+}
+
+fn lex_string_lit(code: &str) -> Option<(Token, usize)> {
+	lazy_static! {
+		static ref RE: Regex = Regex::new(r#"^\s*"(?P<cap>(\\"|.*)*)".*"#).unwrap();
+	}
+
+	if let Some(caps) = RE.captures(code) {
+		match caps.name("cap") {
+			Some(mat) => {
+				let string = mat.as_str().to_string().replace("\\\"", "\""); // handle the escape sequence
+				Some((Token::StringLiteral(string), mat.end() + 1))
+			}, // + 1 to account for the end quote
+			_ => unreachable!() // because it captured something and there's only one capture group
+		}
+	} else {
+		None
+	}
+}
+
+fn lex_char(code: &str) -> Option<(Token, usize)> {
+	lazy_static! {
+		static ref RE: Regex = Regex::new(r#"^\s*'(?P<cap>.)'.*"#).unwrap();
+	}
+
+	if let Some(caps) = RE.captures(code) {
+		match caps.name("cap") {
+			Some(mat) => {
+					let ch = mat.as_str().chars().next().unwrap();
+					Some((Token::Char(ch), mat.end() + 1))
+				}, // + 1 to account for the end quote
+			_ => unreachable!() // because it captured something and there's only one capture group
+		}
+	} else {
+		None
+	}
+}
+
 #[cfg(test)]
 mod tests {
-
 	mod keywords {
+		use super::super::*;
 		#[test]
 		fn it_gets_key_type() {
-
-			let code = " type  xyz";
-
 			
+			let code = " type ";
+			let lexer = Lexer::new();
+			let results = lexer.lex(code);
 
+			assert_eq!(results, vec![Token::KeyType]);
+
+		}
+		#[test]
+		fn it_gets_id() {
+			
+			let code = " type _x1yz ";
+			let lexer = Lexer::new();
+			let results = lexer.lex(code);
+
+			assert_eq!(results, vec![Token::KeyType, Token::Id("_x1yz".to_string())]);
+
+		}
+		#[test]
+		fn it_gets_int_ignores_octal() {
+			
+			let code = " 010 ";
+			let lexer = Lexer::new();
+			let results = lexer.lex(code);
+
+			assert_eq!(results, vec![Token::IntLiteral(10)]);
+
+		}
+
+		#[test]
+		fn it_gets_float() {
+			
+			let code = " 1.25 ";
+			let lexer = Lexer::new();
+			let results = lexer.lex(code);
+
+			assert_eq!(results, vec![Token::FloatLiteral(1.25)]);
+
+		}
+
+
+		#[test]
+		fn it_gets_strings_with_quotes() {
+			
+			let code = r#" "a\"'b\"c" def "#;
+			let lexer = Lexer::new();
+			let results = lexer.lex(code);
+
+			assert_eq!(results, vec![Token::StringLiteral("a\"'b\"c".to_string()), Token::Id("def".to_string())]);
+
+		}
+
+		#[test]
+		fn it_gets_chars() {
+			
+			let code = r#" '	' "#; // it even gets raw tabs!
+			let lexer = Lexer::new();
+			let results = lexer.lex(code);
+
+			assert_eq!(results, vec![Token::Char('\t')]);
+
+		}
+
+		// I didn't want to clutter the list of tests with things that (I think?) will rarely go wrong.
+		#[test]
+		fn it_gets_ops() {
+			{
+				let code = r#" + "#;
+				let lexer = Lexer::new();
+				let results = lexer.lex(code);
+				assert_eq!(results, vec![Token::OpPlus]);
+			}
+			{
+				let code = r#" - "#;
+				let lexer = Lexer::new();
+				let results = lexer.lex(code);
+				assert_eq!(results, vec![Token::OpMinus]);
+			}
+			{
+				let code = r#" * "#;
+				let lexer = Lexer::new();
+				let results = lexer.lex(code);
+				assert_eq!(results, vec![Token::OpStar]);
+			}
+			{
+				let code = r#" / "#;
+				let lexer = Lexer::new();
+				let results = lexer.lex(code);
+				assert_eq!(results, vec![Token::OpSlash]);
+			}
+			{
+				let code = r#" % "#;
+				let lexer = Lexer::new();
+				let results = lexer.lex(code);
+				assert_eq!(results, vec![Token::OpPercent]);
+			}
+			{
+				let code = r#" == "#;
+				let lexer = Lexer::new();
+				let results = lexer.lex(code);
+				assert_eq!(results, vec![Token::OpEquality]);
+			}
+			{
+				let code = r#" = "#;
+				let lexer = Lexer::new();
+				let results = lexer.lex(code);
+				assert_eq!(results, vec![Token::OpAssign]);
+			}
+			{
+				let code = r#" != "#;
+				let lexer = Lexer::new();
+				let results = lexer.lex(code);
+				assert_eq!(results, vec![Token::OpInequality]);
+			}
+			{
+				let code = r#" < "#;
+				let lexer = Lexer::new();
+				let results = lexer.lex(code);
+				assert_eq!(results, vec![Token::OpLess]);
+			}
+			{
+				let code = r#" <= "#;
+				let lexer = Lexer::new();
+				let results = lexer.lex(code);
+				assert_eq!(results, vec![Token::OpLessOrEqual]);
+			}
+			{
+				let code = r#" > "#;
+				let lexer = Lexer::new();
+				let results = lexer.lex(code);
+				assert_eq!(results, vec![Token::OpGreater]);
+			}
+			{
+				let code = r#" >= "#;
+				let lexer = Lexer::new();
+				let results = lexer.lex(code);
+				assert_eq!(results, vec![Token::OpGreaterOrEqual]);
+			}
+			{
+				let code = r#" ( "#;
+				let lexer = Lexer::new();
+				let results = lexer.lex(code);
+				assert_eq!(results, vec![Token::OpLeftParen]);
+			}
+			{
+				let code = r#" ) "#;
+				let lexer = Lexer::new();
+				let results = lexer.lex(code);
+				assert_eq!(results, vec![Token::OpRightParen]);
+			}
+			{
+				let code = r#" ;  "#;
+				let lexer = Lexer::new();
+				let results = lexer.lex(code);
+				assert_eq!(results, vec![Token::SymSemicolon]);
+			}
+			{
+				let code = r#" ,  "#;
+				let lexer = Lexer::new();
+				let results = lexer.lex(code);
+				assert_eq!(results, vec![Token::SymComma]);
+			}
+			{
+				let code = r#" | "#;
+				let lexer = Lexer::new();
+				let results = lexer.lex(code);
+				assert_eq!(results, vec![Token::SymPipe]);
+			}
+			{
+				let code = r#" ] "#;
+				let lexer = Lexer::new();
+				let results = lexer.lex(code);
+				assert_eq!(results, vec![Token::SymRightBracket]);
+			}
+			{
+				let code = r#" [ "#;
+				let lexer = Lexer::new();
+				let results = lexer.lex(code);
+				assert_eq!(results, vec![Token::SymLeftBracket]);
+			}
 		}
 	}
 
