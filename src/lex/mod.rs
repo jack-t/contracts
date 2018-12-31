@@ -130,7 +130,7 @@ fn lex_literal(lit: &'static str, tok: Token) -> Box<TokenProducer> {
 
 fn lex_id(code: &str) -> Option<(Token, usize)> {
 	lazy_static! {
-		static ref RE: Regex = Regex::new(r"^\s*(?P<cap>_*[a-zA-Z]+\w+).*").unwrap();
+		static ref RE: Regex = Regex::new(r"^\s*(?P<cap>_*[a-zA-Z]+\w*).*").unwrap();
 	}
 
 	if let Some(caps) = RE.captures(code) {
@@ -145,7 +145,7 @@ fn lex_id(code: &str) -> Option<(Token, usize)> {
 
 fn lex_int_lit(code: &str) -> Option<(Token, usize)> {
 	lazy_static! {
-		static ref RE: Regex = Regex::new(r"^\s*(?P<cap>\d+).*").unwrap();
+		static ref RE: Regex = Regex::new(r"^\s*(?P<cap>\d+)\b").unwrap();
 	}
 
 	if let Some(caps) = RE.captures(code) {
@@ -234,6 +234,36 @@ mod tests {
 
 		}
 		#[test]
+		#[should_panic]
+		fn it_rejects_ids_with_initial_numeral() {
+			
+			let code = " _1 ";
+			let lexer = Lexer::new();
+			lexer.lex(code);
+		}
+
+		#[test]
+		#[should_panic]
+		fn it_rejects_ids_with_initial_numeral_no_underscore() {
+			
+			let code = " 1a ";
+			let lexer = Lexer::new();
+			lexer.lex(code);
+		}
+
+
+		#[test]
+		fn it_gets_short_id() {
+			
+			let code = " a ";
+			let lexer = Lexer::new();
+			let results = lexer.lex(code);
+
+			assert_eq!(results, vec![Token::Id("a".to_string())]);
+
+		}
+
+		#[test]
 		fn it_gets_int_ignores_octal() {
 			
 			let code = " 010 ";
@@ -242,6 +272,14 @@ mod tests {
 
 			assert_eq!(results, vec![Token::IntLiteral(10)]);
 
+		}
+
+		#[test]
+		#[should_panic]
+		fn it_rejects_ints_with_letters() {
+			let code = " 1b ";
+			let lexer = Lexer::new();
+			lexer.lex(code);
 		}
 
 		#[test]
@@ -270,11 +308,11 @@ mod tests {
 		#[test]
 		fn it_gets_chars() {
 			
-			let code = r#" '	' "#; // it even gets raw tabs!
+			let code = r#" '	' a 'b' "#; // it even gets raw tabs!
 			let lexer = Lexer::new();
 			let results = lexer.lex(code);
 
-			assert_eq!(results, vec![Token::Char('\t')]);
+			assert_eq!(results, vec![Token::Char('\t'), Token::Id("a".to_string()), Token::Char('b')]);
 
 		}
 
