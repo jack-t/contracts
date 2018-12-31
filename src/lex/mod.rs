@@ -283,6 +283,17 @@ mod tests {
 		}
 
 		#[test]
+		fn it_gets_packed_arith() {
+
+			let code = " 1+2 ";
+			let lexer = Lexer::new();
+			let results = lexer.lex(code);
+
+			assert_eq!(results, vec![Token::IntLiteral(1), Token::OpPlus, Token::IntLiteral(2)]);
+
+		}
+
+		#[test]
 		fn it_gets_float() {
 			
 			let code = " 1.25 ";
