@@ -19,47 +19,47 @@ pub enum Expression {
 }
 
 pub struct Conditional {
-	condition: Box<Expression>,
-	true_op: Option<Box<Statement>>,
-	false_op: Option<Box<Statement>>,
+	pub condition: Box<Expression>,
+	pub true_op: Option<Box<Statement>>,
+	pub false_op: Option<Box<Statement>>,
 }
 
 pub struct Loop {
-	condition: Box<Expression>,
-	body: Box<Statement>,
+	pub condition: Box<Expression>,
+	pub body: Box<Statement>,
 }
 
 pub struct FunctionDeclaration { // we can allow closures-ish if this is a branch off expression
-	name: String,
-	parameters: HashMap<String, Box<TypeSpecification>>,
-	return_type: Option<Box<TypeSpecification>>,
-	body: Box<Block>,
+	pub name: String,
+	pub parameters: HashMap<String, Box<TypeSpecification>>,
+	pub return_type: Option<Box<TypeSpecification>>,
+	pub body: Box<Block>,
 }
 
 pub struct TypeSpecification {
-	base: String,
-	contracts: Vec<Box<ContractInvocation>>,
+	pub base: String,
+	pub contracts: Vec<Box<ContractInvocation>>,
 }
 
 pub struct ContractInvocation {
-	contract: String,
-	parameters: Vec<Box<Expression>>,
+	pub contract: String,
+	pub parameters: Vec<Box<Expression>>,
 }
 
 pub struct TypeAliasDeclaration {
-	target: String,
-	source: Box<TypeSpecification>,
+	pub target: String,
+	pub source: Box<TypeSpecification>,
 }
 
 pub struct ContractDeclaration {
-	name: String,
-	parameters: HashMap<String, Box<TypeSpecification>>,
-	body: Box<Block>,
+	pub name: String,
+	pub parameters: HashMap<String, Box<TypeSpecification>>,
+	pub body: Box<Block>,
 }
 
 pub struct Block {
-	statement: Box<Statement>,
-	next: Option<Box<Statement>>,
+	pub statement: Box<Statement>,
+	pub next: Option<Box<Statement>>,
 }
 
 pub enum Statement {
