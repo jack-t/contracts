@@ -38,6 +38,8 @@ pub enum Token {
 	Pipe,
 	LeftBracket,
 	RightBracket,
+	LeftBrace,
+	RightBrace,
 }
 
 type TokenProducer = Fn(&str) -> Option<(Token, usize)>;
@@ -85,6 +87,8 @@ impl Lexer {
 				lex_exactly("\\|", Token::Pipe),
 				lex_exactly("\\]", Token::RightBracket),
 				lex_exactly("\\[", Token::LeftBracket),
+				lex_exactly("\\}", Token::RightBrace),
+				lex_exactly("\\{", Token::LeftBrace),
 
 			],
 		}
@@ -442,6 +446,18 @@ mod tests {
 			let lexer = Lexer::new();
 			let results = lexer.lex(code);
 			assert_eq!(results, vec![Token::LeftBracket]);
+		}
+		{
+			let code = r#" } "#;
+			let lexer = Lexer::new();
+			let results = lexer.lex(code);
+			assert_eq!(results, vec![Token::RightBrace]);
+		}
+		{
+			let code = r#" { "#;
+			let lexer = Lexer::new();
+			let results = lexer.lex(code);
+			assert_eq!(results, vec![Token::LeftBrace]);
 		}
 	}
 
