@@ -14,6 +14,7 @@ pub enum Token {
     Return,
     While,
     If,
+    Else,
     Id(String),
     FloatLiteral(f64),
     IntLiteral(u64),
@@ -63,6 +64,7 @@ impl Lexer {
                 lex_exactly("return", Token::Return),
                 lex_exactly("while", Token::While),
                 lex_exactly("if", Token::If),
+                lex_exactly("else", Token::Else),
                 Box::new(lex_id),
                 Box::new(lex_float_lit), // this comes before int_lit because the float regex is greedy
                 Box::new(lex_int_lit),

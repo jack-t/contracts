@@ -16,13 +16,18 @@ pub enum Expression {
         function_name: String,
         parameters: Vec<Box<Expression>>,
     },
+    VariableReference(String),
+    IntLiteral(u64),
+    FloatLiteral(f64),
+    StringLiteral(String),
+    CharLiteral(char),
     NoOp, // just a semicolon
 }
 
 #[derive(PartialEq, Debug)]
 pub struct Conditional {
     pub condition: Box<Expression>,
-    pub true_op: Option<Box<Statement>>,
+    pub true_op: Box<Statement>,
     pub false_op: Option<Box<Statement>>,
 }
 
@@ -77,7 +82,7 @@ pub enum Statement {
     Expression(Expression),
     Conditional(Conditional),
     Loop(Loop),
-    ReturnStatement(Expression),
+    Return(Expression),
     FunctionDeclaration(FunctionDeclaration),
     TypeAliasDeclaration(TypeAliasDeclaration),
     ContractDeclaration(ContractDeclaration),
