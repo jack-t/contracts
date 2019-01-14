@@ -26,7 +26,7 @@ pub enum Token {
     Slash,
     Percent,
     Equality,
-    Assign,
+    Equals,
     Inequality,
     Less,
     LessOrEqual,
@@ -76,7 +76,7 @@ impl Lexer {
                 lex_exactly("/", Token::Slash),
                 lex_exactly("%", Token::Percent),
                 lex_exactly("==", Token::Equality),
-                lex_exactly("=", Token::Assign),
+                lex_exactly("=", Token::Equals),
                 lex_exactly("!=", Token::Inequality),
                 lex_exactly("<=", Token::LessOrEqual), // order matters with these tokens
                 lex_exactly("<", Token::Less),

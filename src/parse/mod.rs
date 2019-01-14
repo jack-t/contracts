@@ -1,5 +1,7 @@
 pub mod tree;
+pub mod exprs;
 pub use self::tree::*;
+pub use self::exprs::*;
 use super::lex::Token;
 use std::collections::VecDeque;
 
@@ -33,66 +35,6 @@ fn parse_expression_statement(tokens: &mut VecDeque<Token>) -> Option<Box<Statem
     }
 }
 
-fn parse_expression(tokens: &mut VecDeque<Token>) -> Option<Expression> {
-    let tok = tokens.pop_front();
-    let initial = match tok {
-        Some(Token::Id(name)) => parse_id_expr(name, tokens),
-        Some(Token::IntLiteral(val)) => Expression::IntLiteral(val),
-        Some(Token::FloatLiteral(val)) => Expression::FloatLiteral(val),
-        Some(Token::StringLiteral(val)) => Expression::StringLiteral(val),
-        Some(Token::CharLiteral(val)) => Expression::CharLiteral(val),
-        _ => panic!(
-            "Expected expression-initial token at code starting {:?}",
-            tokens
-        ),
-    };
-
-    match tokens.front() {
-        Some(&Token::RightParen) | Some(&Token::Semicolon) | Some(&Token::Comma) => {
-            tokens.pop_front();
-            Some(initial)
-        }
-        Some(&Token::Plus) | Some(&Token::Minus) | Some(&Token::Star) | Some(&Token::Slash) => {
-            let got = tokens
-                .pop_front()
-                .expect("Got an op that doesn't make sense, I guess");
-            Some(Expression::Binary {
-                op: got,
-                lhs: Box::new(initial),
-                rhs: Box::new(
-                    parse_expression(tokens).expect("Binary expression expected a right operand"),
-                ),
-            })
-        }
-        x @ _ => panic!("{:?} is not a valid expression terminal", x),
-    }
-}
-
-fn parse_id_expr(name: String, tokens: &mut VecDeque<Token>) -> Expression {
-    let next = match tokens.front() {
-        Some(x) => Some(x.clone()),
-        None => None,
-    };
-
-    match next {
-        Some(Token::LeftParen) => {
-            next_tok_is(tokens, Token::LeftParen);
-            let mut p = Vec::new();
-            while tokens.front() != Some(&Token::RightParen) {
-                p.push(Box::new(
-                    parse_expression(tokens)
-                        .expect("Parsing parameter didn't yield valid expression"),
-                ));
-            }
-            p.reverse();
-            Expression::FunctionCall {
-                function_name: name,
-                parameters: p,
-            }
-        }
-        _ => Expression::VariableReference(name),
-    }
-}
 fn parse_conditional(tokens: &mut VecDeque<Token>) -> Option<Box<Statement>> {
     next_tok_is(tokens, Token::If);
     next_tok_is(tokens, Token::LeftParen);

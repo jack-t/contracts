@@ -3,6 +3,11 @@ use std::collections::HashMap;
 
 #[derive(PartialEq, Debug)]
 pub enum Expression {
+    Assignment {
+        op: Token, // =, +=, etc.
+        lhs: Box<Expression>,
+        rhs: Box<Expression>,
+    },
     Binary {
         op: Token,
         lhs: Box<Expression>,
