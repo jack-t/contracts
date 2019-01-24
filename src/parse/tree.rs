@@ -4,92 +4,45 @@ use std::collections::HashMap;
 #[derive(PartialEq, Debug)]
 pub enum Expression {
     Assignment {
-        op: Token, // =, +=, etc.
-        lhs: Box<Expression>,
-        rhs: Box<Expression>,
+        lvalue: Box<Expression>,
+        rvalue: Box<Expression>,
+    },
+    Variable {
+        name: String,
+    },
+    Int {
+        value: u64,
+    },
+    Str {
+        value: String,
+    },
+    Dec {
+        value: f64,
+    },
+    Char {
+        value: char,
+    },
+    FunctionCall {
+        func: String,
+        params: Vec<Box<Expression>>,
     },
     Binary {
         op: Token,
         lhs: Box<Expression>,
         rhs: Box<Expression>,
     },
-    Unary {
-        op: Option<Token>,
-        operand: Box<Expression>,
-    },
-    FunctionCall {
-        function_name: String,
-        parameters: Vec<Box<Expression>>,
-    },
-    VariableReference(String),
-    IntLiteral(u64),
-    FloatLiteral(f64),
-    StringLiteral(String),
-    CharLiteral(char),
-    NoOp, // just a semicolon
 }
 
-#[derive(PartialEq, Debug)]
-pub struct Conditional {
-    pub condition: Box<Expression>,
-    pub true_op: Box<Statement>,
-    pub false_op: Option<Box<Statement>>,
-}
-
-#[derive(PartialEq, Debug)]
-pub struct Loop {
-    pub condition: Box<Expression>,
-    pub body: Box<Statement>,
-}
-
-#[derive(PartialEq, Debug)]
-pub struct FunctionDeclaration {
-    // we can allow closures-ish if this is a branch off expression
-    pub name: String,
-    pub parameters: HashMap<String, Box<TypeSpecification>>,
-    pub return_type: Option<Box<TypeSpecification>>,
-    pub body: Box<Block>,
-}
-
-#[derive(PartialEq, Debug)]
-pub struct TypeSpecification {
-    pub base: String,
-    pub contracts: Vec<Box<ContractInvocation>>,
-}
-
-#[derive(PartialEq, Debug)]
-pub struct ContractInvocation {
-    pub contract: String,
-    pub parameters: Vec<Box<Expression>>,
-}
-
-#[derive(PartialEq, Debug)]
-pub struct TypeAliasDeclaration {
-    pub target: String,
-    pub source: Box<TypeSpecification>,
-}
-
-#[derive(PartialEq, Debug)]
-pub struct ContractDeclaration {
-    pub name: String,
-    pub parameters: HashMap<String, Box<TypeSpecification>>,
-    pub body: Box<Block>,
-}
-
-#[derive(PartialEq, Debug)]
-pub struct Block {
-    pub statement: Box<Statement>,
-    pub next: Option<Box<Statement>>,
-}
-
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq)]
 pub enum Statement {
-    Expression(Expression),
-    Conditional(Conditional),
-    Loop(Loop),
-    Return(Expression),
-    FunctionDeclaration(FunctionDeclaration),
-    TypeAliasDeclaration(TypeAliasDeclaration),
-    ContractDeclaration(ContractDeclaration),
-    Block(Block),
+    Conditional {
+        condition: Box<Expression>,
+        true_statement: Box<Statement>,
+        false_statement: Option<Box<Statement>>,
+    },
+    Block {
+        statement: Box<Statement>,
+        next: Option<Box<Statement>>,
+    },
+    // func decl
 }

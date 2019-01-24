@@ -1,112 +1,78 @@
 pub mod tree;
-pub mod exprs;
 pub use self::tree::*;
-pub use self::exprs::*;
 use super::lex::Token;
 use std::collections::VecDeque;
 
-fn parse_tokens(mut tokens: VecDeque<Token>) -> Option<Box<Statement>> {
-    parse_block(&mut tokens)
+fn parse(tokens: VecDeque<Token>) -> Statement {
+    unimplemented!();
 }
 
-// each of the called functions will consume its own terminal -- whether } or ;
-fn parse_statement(tokens: &mut VecDeque<Token>) -> Option<Box<Statement>> {
-    if let Some(tok) = tokens.front() {
-        match tok {
-            Token::Id(_) | Token::LeftParen => parse_expression_statement(tokens),
-            Token::If => parse_conditional(tokens),
-            Token::While => parse_loop(tokens),
-            Token::Return => parse_return(tokens),
-            Token::Fn => parse_fn_decl(tokens),
-            Token::Type => parse_type_alias_decl(tokens),
-            Token::Contract => parse_contract(tokens),
-            Token::LeftBrace => parse_block(tokens),
-            _ => panic!("Unexpected {:?}; expected statement-initial token.", tok),
-        }
-    } else {
-        None
+// must return -- panics if it has to
+fn parse_expression(tokens: &mut VecDeque<Token>) -> Expression {
+    match tokens.get(1) {
+        Some(&Token::Equals) => parse_assignment(tokens),
+        Some(_) => parse_rvalue(tokens),
+        None => panic!("Parse error: Expected an expression, got end-of-stream."),
     }
 }
 
-fn parse_expression_statement(tokens: &mut VecDeque<Token>) -> Option<Box<Statement>> {
-    match parse_expression(tokens) {
-        Some(expr) => Some(Box::new(Statement::Expression(expr))),
-        None => None,
+fn parse_assignment(tokens: &mut VecDeque<Token>) -> Expression {
+    let lv = build_var_ref(
+        tokens
+            .pop_front()
+            .expect("Parse error: l-value can only be a variable reference."),
+    );
+    tokens.pop_front(); // == =
+    let rv = parse_rvalue(tokens);
+    Expression::Assignment {
+        lvalue: Box::new(lv),
+        rvalue: Box::new(rv),
     }
 }
 
-fn parse_conditional(tokens: &mut VecDeque<Token>) -> Option<Box<Statement>> {
-    next_tok_is(tokens, Token::If);
-    next_tok_is(tokens, Token::LeftParen);
-
-    let condition = parse_expression(tokens);
-    // parse_expression consumes its right paren
-
-    let true_block = parse_statement(tokens);
-
-    let false_block = if tokens.front() == Some(&Token::Else) {
-        parse_statement(tokens)
-    } else {
-        None
+fn parse_rvalue(tokens: &mut VecDeque<Token>) -> Expression {
+    let initial = match tokens.pop_front() {
+        Some(Token::IntLiteral(val)) => Expression::Int { value: val },
+        Some(Token::Id(name)) => parse_id_expr(name, tokens),
+        _ => unimplemented!(),
     };
 
-    Some(Box::new(Statement::Conditional(Conditional {
-        condition: Box::new(condition.expect("A conditional has to have a condition")),
-        true_op: true_block.expect("A conditional has to have a true block"),
-        false_op: false_block,
-    })))
-}
-fn parse_loop(tokens: &mut VecDeque<Token>) -> Option<Box<Statement>> {
-    next_tok_is(tokens, Token::While);
-
-    let condition = parse_expression(tokens);
-
-    let block = parse_statement(tokens);
-
-    Some(Box::new(Statement::Loop(Loop {
-        condition: Box::new(condition.expect("Loops need conditions")),
-        body: block.expect("Loops need bodies"),
-    })))
-}
-fn parse_return(tokens: &mut VecDeque<Token>) -> Option<Box<Statement>> {
-    next_tok_is(tokens, Token::Return);
-
-    Some(Box::new(Statement::Return(
-        parse_expression(tokens).expect("Return statements need things to return"),
-    )))
-}
-fn parse_fn_decl(tokens: &mut VecDeque<Token>) -> Option<Box<Statement>> {
-    unimplemented!();
-}
-fn parse_type_alias_decl(tokens: &mut VecDeque<Token>) -> Option<Box<Statement>> {
-    unimplemented!();
-}
-fn parse_contract(tokens: &mut VecDeque<Token>) -> Option<Box<Statement>> {
-    unimplemented!();
-}
-fn parse_block(tokens: &mut VecDeque<Token>) -> Option<Box<Statement>> {
-    let statement = parse_statement(tokens);
-    match statement {
-        Some(bs) => Some(Box::new(Statement::Block(Block {
-            statement: bs,
-            next: parse_statement(tokens),
-        }))),
-        None => None,
-    }
-    // I think I need to require a } here?
-
-}
-
-fn next_tok_is(tokens: &mut VecDeque<Token>, tok: Token) {
-    match tokens.pop_front() {
-        Some(ref next) if next == &tok => (),
-        next @ _ => panic!("Parse error: Expected {:?}, got {:?}", tok, next),
+    if (is_bin_op(tokens.front())) {
+        let op = tokens
+            .pop_front()
+            .expect("Binary operations need a binary operation");
+        let rhs = parse_rvalue(tokens);
+        return Expression::Binary {
+            op: op,
+            lhs: Box::new(initial),
+            rhs: Box::new(rhs),
+        };
+    } else {
+        return initial;
     }
 }
 
-fn is_operator(tok: &Token) -> bool {
+fn parse_id_expr(name: String, tokens: &mut VecDeque<Token>) -> Expression {
+    match tokens.front() {
+        Some(&Token::LeftParen) => unimplemented!(),
+        _ => Expression::Variable { name: name },
+    }
+}
+
+fn build_var_ref(tok: Token) -> Expression {
     match tok {
-        Token::Plus | Token::Minus | Token::Star | Token::Slash => true,
+        Token::Id(name) => Expression::Variable { name: name },
+        _ => panic!("Parse error: variable reference must be an identifier"),
+    }
+}
+
+fn is_bin_op(tok: Option<&Token>) -> bool {
+    match tok {
+        Some(Token::Plus) => true,
+        Some(Token::Minus) => true,
+        Some(Token::Star) => true,
+        Some(Token::Slash) => true,
+        Some(Token::Percent) => true,
         _ => false,
     }
 }
@@ -115,27 +81,72 @@ fn is_operator(tok: &Token) -> bool {
 mod tests {
     use super::*;
     #[test]
-    fn it_handles_empty_tok_stream() {
-        let toks = VecDeque::new();
-        let result = parse_tokens(toks);
-        assert_eq!(result, None);
+    fn it_gets_int_assignment() {
+        let mut toks = VecDeque::from(vec![
+            Token::Id("a".to_string()),
+            Token::Equals,
+            Token::IntLiteral(5),
+        ]);
+        assert_eq!(
+            parse_assignment(&mut toks),
+            Expression::Assignment {
+                lvalue: Box::new(Expression::Variable {
+                    name: "a".to_string()
+                }),
+                rvalue: Box::new(Expression::Int { value: 5 }),
+            }
+        );
+        assert_eq!(toks, VecDeque::new());
+    }
+    #[test]
+    fn it_gets_id_assignment() {
+        let mut toks = VecDeque::from(vec![
+            Token::Id("a".to_string()),
+            Token::Equals,
+            Token::Id("a".to_string()),
+        ]);
+        assert_eq!(
+            parse_assignment(&mut toks),
+            Expression::Assignment {
+                lvalue: Box::new(Expression::Variable {
+                    name: "a".to_string()
+                }),
+                rvalue: Box::new(Expression::Variable {
+                    name: "a".to_string()
+                }),
+            }
+        );
+        assert_eq!(toks, VecDeque::new());
     }
 
-    mod internal {
-        use super::super::*;
-        #[test]
-        fn test_assertion_utility_good() {
-            let mut toks = VecDeque::from(vec![Token::Id("abc".to_string()), Token::LeftParen]);
-            let result = next_tok_is(&mut toks, Token::Id("abc".to_string()));
-            assert_eq!(result, ());
-            assert_eq!(toks, vec![Token::LeftParen]);
-        }
-
-        #[test]
-        #[should_panic]
-        fn test_assertion_utility_bad() {
-            let mut toks = VecDeque::from(vec![Token::Id("abc".to_string()), Token::LeftParen]);
-            let result = next_tok_is(&mut toks, Token::LeftParen);
-        }
+    #[test]
+    fn it_gets_sequential_arith() {
+        let mut toks = VecDeque::from(vec![
+            Token::Id("a".to_string()),
+            Token::Star,
+            Token::Id("a".to_string()),
+            Token::Star,
+            Token::Id("a".to_string()),
+        ]);
+        assert_eq!(
+            parse_rvalue(&mut toks),
+            Expression::Binary {
+                op: Token::Star,
+                lhs: Box::new(Expression::Variable {
+                    name: "a".to_string()
+                }),
+                rhs: Box::new(Expression::Binary {
+                    op: Token::Star,
+                    lhs: Box::new(Expression::Variable {
+                        name: "a".to_string()
+                    }),
+                    rhs: Box::new(Expression::Variable {
+                        name: "a".to_string()
+                    }),
+                }),
+            }
+        );
+        assert_eq!(toks, VecDeque::new());
     }
+
 }

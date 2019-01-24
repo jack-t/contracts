@@ -1,5 +1,6 @@
 use lazy_static::*;
 use regex::Regex;
+use std::collections::VecDeque;
 
 #[derive(PartialEq, Clone, Debug)]
 pub enum Token {
@@ -95,12 +96,12 @@ impl Lexer {
         }
     }
 
-    pub fn lex(&self, code: &str) -> Vec<Token> {
-        let mut ret = Vec::new();
+    pub fn lex(&self, code: &str) -> VecDeque<Token> {
+        let mut ret = VecDeque::new();
         let mut offset = 0;
         while (&code[offset..]).trim().len() > 0 {
             if let Some((tok, adv)) = self.tokenize(&code[offset..]) {
-                ret.push(tok);
+                ret.push_back(tok);
                 offset += adv;
             } else {
                 panic!(
@@ -380,7 +381,7 @@ mod tests {
             let code = r#" = "#;
             let lexer = Lexer::new();
             let results = lexer.lex(code);
-            assert_eq!(results, vec![Token::Assign]);
+            assert_eq!(results, vec![Token::Equals]);
         }
         {
             let code = r#" != "#;
