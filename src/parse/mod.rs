@@ -3,16 +3,30 @@ pub use self::tree::*;
 use super::lex::Token;
 use std::collections::VecDeque;
 
-fn parse(tokens: VecDeque<Token>) -> Statement {
-    unimplemented!();
+fn parse(mut tokens: VecDeque<Token>) -> Option<Statement> {
+    match tokens.front() {
+        Some(&Token::Id(_)) => Some(parse_statement_expr(&mut tokens)),
+        Some(_) => unimplemented!(),
+        _ => panic!("Parse error: Statement-terminal required"),
+    }
+}
+
+fn parse_statement_expr(tokens: &mut VecDeque<Token>) -> Statement {
+    let expr = parse_expression(tokens);
+    next_tok_is(tokens, Token::Semicolon);
+    return Statement::Expression {
+        expression: Box::new(expr),
+    };
 }
 
 // must return -- panics if it has to
 fn parse_expression(tokens: &mut VecDeque<Token>) -> Expression {
     match tokens.get(1) {
         Some(&Token::Equals) => parse_assignment(tokens),
-        Some(_) => parse_rvalue(tokens),
-        None => panic!("Parse error: Expected an expression, got end-of-stream."),
+        _ => match tokens.get(0) {
+            Some(_) => parse_rvalue(tokens),
+            None => panic!("Parse error: Expected an expression, got end-of-stream."),
+        },
     }
 }
 
@@ -22,11 +36,12 @@ fn parse_assignment(tokens: &mut VecDeque<Token>) -> Expression {
             .pop_front()
             .expect("Parse error: l-value can only be a variable reference."),
     );
-    tokens.pop_front(); // == =
-    let rv = parse_rvalue(tokens);
+
+    next_tok_is(tokens, Token::Equals);
+
     Expression::Assignment {
         lvalue: Box::new(lv),
-        rvalue: Box::new(rv),
+        rvalue: Box::new(parse_rvalue(tokens)),
     }
 }
 
@@ -37,6 +52,7 @@ fn parse_rvalue(tokens: &mut VecDeque<Token>) -> Expression {
         _ => unimplemented!(),
     };
 
+    // a smarter version of this would allow for nested assignments
     if (is_bin_op(tokens.front())) {
         let op = tokens
             .pop_front()
@@ -77,6 +93,13 @@ fn is_bin_op(tok: Option<&Token>) -> bool {
     }
 }
 
+fn next_tok_is(tokens: &mut VecDeque<Token>, tok: Token) {
+    match tokens.pop_front() {
+        Some(ref next) if next == &tok => (),
+        next @ _ => panic!("Parse error: Expected {:?}, got {:?}", tok, next),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -88,7 +111,7 @@ mod tests {
             Token::IntLiteral(5),
         ]);
         assert_eq!(
-            parse_assignment(&mut toks),
+            parse_expression(&mut toks),
             Expression::Assignment {
                 lvalue: Box::new(Expression::Variable {
                     name: "a".to_string()
@@ -99,6 +122,26 @@ mod tests {
         assert_eq!(toks, VecDeque::new());
     }
     #[test]
+    fn it_gets_int_assignment_as_statement() {
+        let mut toks = VecDeque::from(vec![
+            Token::Id("a".to_string()),
+            Token::Equals,
+            Token::IntLiteral(5),
+            Token::Semicolon,
+        ]);
+        assert_eq!(
+            parse(toks),
+            Some(Statement::Expression {
+                expression: Box::new(Expression::Assignment {
+                    lvalue: Box::new(Expression::Variable {
+                        name: "a".to_string()
+                    }),
+                    rvalue: Box::new(Expression::Int { value: 5 }),
+                })
+            }),
+        );
+    }
+    #[test]
     fn it_gets_id_assignment() {
         let mut toks = VecDeque::from(vec![
             Token::Id("a".to_string()),
@@ -106,7 +149,7 @@ mod tests {
             Token::Id("a".to_string()),
         ]);
         assert_eq!(
-            parse_assignment(&mut toks),
+            parse_expression(&mut toks),
             Expression::Assignment {
                 lvalue: Box::new(Expression::Variable {
                     name: "a".to_string()
@@ -129,7 +172,7 @@ mod tests {
             Token::Id("a".to_string()),
         ]);
         assert_eq!(
-            parse_rvalue(&mut toks),
+            parse_expression(&mut toks),
             Expression::Binary {
                 op: Token::Star,
                 lhs: Box::new(Expression::Variable {
@@ -142,6 +185,42 @@ mod tests {
                     }),
                     rhs: Box::new(Expression::Variable {
                         name: "a".to_string()
+                    }),
+                }),
+            }
+        );
+        assert_eq!(toks, VecDeque::new());
+    }
+    #[test]
+    fn it_gets_assignment_and_arith() {
+        let mut toks = VecDeque::from(vec![
+            Token::Id("a".to_string()),
+            Token::Equals,
+            Token::Id("a".to_string()),
+            Token::Star,
+            Token::Id("a".to_string()),
+            Token::Star,
+            Token::Id("a".to_string()),
+        ]);
+        assert_eq!(
+            parse_expression(&mut toks),
+            Expression::Assignment {
+                lvalue: Box::new(Expression::Variable {
+                    name: "a".to_string()
+                }),
+                rvalue: Box::new(Expression::Binary {
+                    op: Token::Star,
+                    lhs: Box::new(Expression::Variable {
+                        name: "a".to_string()
+                    }),
+                    rhs: Box::new(Expression::Binary {
+                        op: Token::Star,
+                        lhs: Box::new(Expression::Variable {
+                            name: "a".to_string()
+                        }),
+                        rhs: Box::new(Expression::Variable {
+                            name: "a".to_string()
+                        }),
                     }),
                 }),
             }

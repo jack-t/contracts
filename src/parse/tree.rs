@@ -33,8 +33,11 @@ pub enum Expression {
     },
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Debug)]
 pub enum Statement {
+    Expression {
+        expression: Box<Expression>,
+    },
     Conditional {
         condition: Box<Expression>,
         true_statement: Box<Statement>,
