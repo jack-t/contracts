@@ -44,8 +44,7 @@ pub enum Statement {
         false_statement: Option<Box<Statement>>,
     },
     Block {
-        statement: Box<Statement>,
-        next: Box<Statement>,
+        code: Vec<Statement>,
     },
     NoOp,
     // func decl

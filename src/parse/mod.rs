@@ -3,8 +3,11 @@ pub use self::tree::*;
 use super::lex::Token;
 use std::collections::VecDeque;
 
-fn parse(mut tokens: VecDeque<Token>) -> Option<Statement> {
-    Some(parse_statement(&mut tokens))
+fn parse(mut tokens: VecDeque<Token>) -> Statement {
+    tokens.push_front(Token::LeftBrace);
+    tokens.push_back(Token::RightBrace);
+
+    parse_statement(&mut tokens)
 }
 
 fn parse_statement(tokens: &mut VecDeque<Token>) -> Statement {
@@ -31,17 +34,24 @@ fn parse_statement_expr(tokens: &mut VecDeque<Token>) -> Statement {
 fn parse_block(tokens: &mut VecDeque<Token>) -> Statement {
     next_tok_is(tokens, Token::LeftBrace);
 
-    let block = match tokens.front() {
-        Some(&Token::RightBrace) => Statement::NoOp,
-        _ => Statement::Block {
-            statement: Box::new(parse_statement(tokens)),
-            next: Box::new(parse_statement(tokens)),
-        },
+    let block = Statement::Block {
+        code: parse_series(tokens),
     };
 
     next_tok_is(tokens, Token::RightBrace);
 
     block
+}
+
+fn parse_series(tokens: &mut VecDeque<Token>) -> Vec<Statement> {
+    let mut statements = Vec::new();
+    loop {
+        match tokens.front() {
+            Some(&Token::RightBrace) => break,
+            _ => statements.push(parse_statement(tokens)),
+        };
+    }
+    statements
 }
 
 // must return -- panics if it has to
@@ -95,7 +105,23 @@ fn parse_rvalue(tokens: &mut VecDeque<Token>) -> Expression {
 
 fn parse_id_expr(name: String, tokens: &mut VecDeque<Token>) -> Expression {
     match tokens.front() {
-        Some(&Token::LeftParen) => unimplemented!(),
+        Some(&Token::LeftParen) => {
+            next_tok_is(tokens, Token::LeftParen);
+
+            let mut params = Vec::new();
+            loop {
+                match tokens.front() {
+                    Some(&Token::RightParen) => break,
+                    _ => params.push(Box::new(parse_expression(tokens))),
+                };
+            }
+
+            next_tok_is(tokens, Token::RightParen);
+            Expression::FunctionCall {
+                func: name,
+                params: params,
+            }
+        }
         _ => Expression::Variable { name: name },
     }
 }
@@ -156,14 +182,16 @@ mod tests {
         ]);
         assert_eq!(
             parse(toks),
-            Some(Statement::Expression {
-                expression: Box::new(Expression::Assignment {
-                    lvalue: Box::new(Expression::Variable {
-                        name: "a".to_string()
-                    }),
-                    rvalue: Box::new(Expression::Int { value: 5 }),
-                })
-            }),
+            Statement::Block {
+                code: vec![Statement::Expression {
+                    expression: Box::new(Expression::Assignment {
+                        lvalue: Box::new(Expression::Variable {
+                            name: "a".to_string()
+                        }),
+                        rvalue: Box::new(Expression::Int { value: 5 }),
+                    })
+                }]
+            },
         );
     }
     #[test]
@@ -261,17 +289,15 @@ mod tests {
             Token::Equals,
             Token::Id("a".to_string()),
             Token::Semicolon,
-            Token::Id("a".to_string()),
-            Token::Equals,
-            Token::Id("a".to_string()),
-            Token::Semicolon,
             Token::RightBrace,
         ]);
 
+        let results = parse_statement(&mut toks);
+
         assert_eq!(
-            parse_statement(&mut toks),
+            results,
             Statement::Block {
-                statement: Box::new(Statement::Expression {
+                code: vec![Statement::Expression {
                     expression: Box::new(Expression::Assignment {
                         lvalue: Box::new(Expression::Variable {
                             name: "a".to_string()
@@ -279,32 +305,24 @@ mod tests {
                         rvalue: Box::new(Expression::Variable {
                             name: "a".to_string()
                         }),
-                    }),
-                }),
-                next: Box::new(Statement::Expression {
-                    expression: Box::new(Expression::Assignment {
-                        lvalue: Box::new(Expression::Variable {
-                            name: "a".to_string()
-                        }),
-                        rvalue: Box::new(Expression::Variable {
-                            name: "a".to_string()
-                        }),
-                    }),
-                })
+                    })
+                }]
             }
         );
-
-        assert_eq!(toks, VecDeque::new()); // should empty the list
     }
 
     #[test]
-    #[should_panic]
-    fn it_rejects_a_block_without_semis() {
+    fn it_gets_a_long_block() {
         let mut toks = VecDeque::from(vec![
             Token::LeftBrace,
             Token::Id("a".to_string()),
             Token::Equals,
             Token::Id("a".to_string()),
+            Token::Semicolon,
+            Token::Id("a".to_string()),
+            Token::Equals,
+            Token::Id("a".to_string()),
+            Token::Semicolon,
             Token::Id("a".to_string()),
             Token::Equals,
             Token::Id("a".to_string()),
@@ -312,41 +330,128 @@ mod tests {
             Token::RightBrace,
         ]);
 
-        parse_statement(&mut toks);
-    }
-    #[test]
-    #[should_panic]
-    fn it_rejects_a_block_without_close_brace() {
-        let mut toks = VecDeque::from(vec![
-            Token::LeftBrace,
-            Token::Id("a".to_string()),
-            Token::Equals,
-            Token::Id("a".to_string()),
-            Token::Semicolon,
-            Token::Id("a".to_string()),
-            Token::Equals,
-            Token::Id("a".to_string()),
-            Token::Semicolon,
-        ]);
-
-        parse_statement(&mut toks);
-    }
-    #[test]
-    fn it_gets_empty_block() {
-        let mut toks = VecDeque::from(vec![Token::LeftBrace, Token::RightBrace]);
-
-        assert_eq!(parse_statement(&mut toks), Statement::NoOp);
-    }
-
-    #[test]
-    fn it_gets_empty_block_with_noop() {
-        let mut toks = VecDeque::from(vec![Token::LeftBrace, Token::Semicolon, Token::RightBrace]);
+        let results = parse_statement(&mut toks);
 
         assert_eq!(
-            parse_statement(&mut toks),
+            results,
             Statement::Block {
-                statement: Box::new(Statement::NoOp),
-                next: Box::new(Statement::NoOp),
+                code: vec![
+                    Statement::Expression {
+                        expression: Box::new(Expression::Assignment {
+                            lvalue: Box::new(Expression::Variable {
+                                name: "a".to_string()
+                            }),
+                            rvalue: Box::new(Expression::Variable {
+                                name: "a".to_string()
+                            }),
+                        })
+                    },
+                    Statement::Expression {
+                        expression: Box::new(Expression::Assignment {
+                            lvalue: Box::new(Expression::Variable {
+                                name: "a".to_string()
+                            }),
+                            rvalue: Box::new(Expression::Variable {
+                                name: "a".to_string()
+                            }),
+                        })
+                    },
+                    Statement::Expression {
+                        expression: Box::new(Expression::Assignment {
+                            lvalue: Box::new(Expression::Variable {
+                                name: "a".to_string()
+                            }),
+                            rvalue: Box::new(Expression::Variable {
+                                name: "a".to_string()
+                            }),
+                        })
+                    }
+                ]
+            }
+        );
+    }
+
+    #[test]
+    fn it_gets_an_empty_block() {
+        let mut toks = VecDeque::from(vec![Token::LeftBrace, Token::RightBrace]);
+
+        let results = parse_statement(&mut toks);
+
+        assert_eq!(results, Statement::Block { code: vec![] });
+    }
+
+    #[test]
+    fn it_gets_a_noop_block() {
+        let mut toks = VecDeque::from(vec![Token::LeftBrace, Token::Semicolon, Token::RightBrace]);
+
+        let results = parse_statement(&mut toks);
+
+        assert_eq!(
+            results,
+            Statement::Block {
+                code: vec![Statement::NoOp]
+            }
+        );
+    }
+
+    #[test]
+    fn parse_gets_empty_blocks() {
+        let mut toks = VecDeque::from(vec![]);
+        let results = parse(toks);
+
+        assert_eq!(results, Statement::Block { code: vec![] });
+    }
+    #[test]
+    fn parse_gets_noop_blocks() {
+        let mut toks = VecDeque::from(vec![Token::Semicolon]);
+        let results = parse(toks);
+
+        assert_eq!(
+            results,
+            Statement::Block {
+                code: vec![Statement::NoOp]
+            }
+        );
+    }
+
+    #[test]
+    fn it_gets_no_params() {
+        let mut toks = VecDeque::from(vec![
+            Token::Id("abc".to_string()),
+            Token::LeftParen,
+            Token::RightParen,
+        ]);
+        let results = parse_expression(&mut toks);
+
+        assert_eq!(
+            results,
+            Expression::FunctionCall {
+                func: "abc".to_string(),
+                params: vec![]
+            }
+        );
+    }
+    #[test]
+    fn it_gets_params() {
+        let mut toks = VecDeque::from(vec![
+            Token::Id("abc".to_string()),
+            Token::LeftParen,
+            Token::IntLiteral(5),
+            Token::Id("def".to_string()),
+            Token::RightParen,
+        ]);
+        let results = parse_expression(&mut toks);
+
+        assert_eq!(
+            results,
+            Expression::FunctionCall {
+                func: "abc".to_string(),
+                params: vec![
+                    Box::new(Expression::Int { value: 5 }),
+                    Box::new(Expression::Variable {
+                        name: "def".to_string()
+                    })
+                ]
             }
         );
     }
