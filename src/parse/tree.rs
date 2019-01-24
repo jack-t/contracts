@@ -45,7 +45,8 @@ pub enum Statement {
     },
     Block {
         statement: Box<Statement>,
-        next: Option<Box<Statement>>,
+        next: Box<Statement>,
     },
+    NoOp,
     // func decl
 }

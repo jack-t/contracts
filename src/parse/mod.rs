@@ -4,10 +4,19 @@ use super::lex::Token;
 use std::collections::VecDeque;
 
 fn parse(mut tokens: VecDeque<Token>) -> Option<Statement> {
+    Some(parse_statement(&mut tokens))
+}
+
+fn parse_statement(tokens: &mut VecDeque<Token>) -> Statement {
     match tokens.front() {
-        Some(&Token::Id(_)) => Some(parse_statement_expr(&mut tokens)),
-        Some(_) => unimplemented!(),
-        _ => panic!("Parse error: Statement-terminal required"),
+        Some(&Token::Id(_)) => parse_statement_expr(tokens),
+        Some(&Token::LeftBrace) => parse_block(tokens),
+        Some(&Token::Semicolon) => {
+            tokens.pop_front();
+            Statement::NoOp
+        }
+        x @ Some(_) => unimplemented!("Not implemented: {:?}", x),
+        _ => panic!("Parse error: Statement-initial token required"),
     }
 }
 
@@ -17,6 +26,22 @@ fn parse_statement_expr(tokens: &mut VecDeque<Token>) -> Statement {
     return Statement::Expression {
         expression: Box::new(expr),
     };
+}
+
+fn parse_block(tokens: &mut VecDeque<Token>) -> Statement {
+    next_tok_is(tokens, Token::LeftBrace);
+
+    let block = match tokens.front() {
+        Some(&Token::RightBrace) => Statement::NoOp,
+        _ => Statement::Block {
+            statement: Box::new(parse_statement(tokens)),
+            next: Box::new(parse_statement(tokens)),
+        },
+    };
+
+    next_tok_is(tokens, Token::RightBrace);
+
+    block
 }
 
 // must return -- panics if it has to
@@ -228,4 +253,101 @@ mod tests {
         assert_eq!(toks, VecDeque::new());
     }
 
+    #[test]
+    fn it_gets_a_block() {
+        let mut toks = VecDeque::from(vec![
+            Token::LeftBrace,
+            Token::Id("a".to_string()),
+            Token::Equals,
+            Token::Id("a".to_string()),
+            Token::Semicolon,
+            Token::Id("a".to_string()),
+            Token::Equals,
+            Token::Id("a".to_string()),
+            Token::Semicolon,
+            Token::RightBrace,
+        ]);
+
+        assert_eq!(
+            parse_statement(&mut toks),
+            Statement::Block {
+                statement: Box::new(Statement::Expression {
+                    expression: Box::new(Expression::Assignment {
+                        lvalue: Box::new(Expression::Variable {
+                            name: "a".to_string()
+                        }),
+                        rvalue: Box::new(Expression::Variable {
+                            name: "a".to_string()
+                        }),
+                    }),
+                }),
+                next: Box::new(Statement::Expression {
+                    expression: Box::new(Expression::Assignment {
+                        lvalue: Box::new(Expression::Variable {
+                            name: "a".to_string()
+                        }),
+                        rvalue: Box::new(Expression::Variable {
+                            name: "a".to_string()
+                        }),
+                    }),
+                })
+            }
+        );
+
+        assert_eq!(toks, VecDeque::new()); // should empty the list
+    }
+
+    #[test]
+    #[should_panic]
+    fn it_rejects_a_block_without_semis() {
+        let mut toks = VecDeque::from(vec![
+            Token::LeftBrace,
+            Token::Id("a".to_string()),
+            Token::Equals,
+            Token::Id("a".to_string()),
+            Token::Id("a".to_string()),
+            Token::Equals,
+            Token::Id("a".to_string()),
+            Token::Semicolon,
+            Token::RightBrace,
+        ]);
+
+        parse_statement(&mut toks);
+    }
+    #[test]
+    #[should_panic]
+    fn it_rejects_a_block_without_close_brace() {
+        let mut toks = VecDeque::from(vec![
+            Token::LeftBrace,
+            Token::Id("a".to_string()),
+            Token::Equals,
+            Token::Id("a".to_string()),
+            Token::Semicolon,
+            Token::Id("a".to_string()),
+            Token::Equals,
+            Token::Id("a".to_string()),
+            Token::Semicolon,
+        ]);
+
+        parse_statement(&mut toks);
+    }
+    #[test]
+    fn it_gets_empty_block() {
+        let mut toks = VecDeque::from(vec![Token::LeftBrace, Token::RightBrace]);
+
+        assert_eq!(parse_statement(&mut toks), Statement::NoOp);
+    }
+
+    #[test]
+    fn it_gets_empty_block_with_noop() {
+        let mut toks = VecDeque::from(vec![Token::LeftBrace, Token::Semicolon, Token::RightBrace]);
+
+        assert_eq!(
+            parse_statement(&mut toks),
+            Statement::Block {
+                statement: Box::new(Statement::NoOp),
+                next: Box::new(Statement::NoOp),
+            }
+        );
+    }
 }
