@@ -53,7 +53,7 @@ contract bounds[lower: int, upper: int](this: int) {
 	return this >= lower && this < upper;
 }
 
-type int|parity[got_parity]|bounds[0, 10]; // has a parity check (got_parity being the parity value you just read) and a bounds check
+type special_int int|parity[got_parity]|bounds[0, 10]; // has a parity check (got_parity being the parity value you just read) and a bounds check
 ```
 
 # Tokens
