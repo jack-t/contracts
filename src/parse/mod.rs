@@ -73,13 +73,17 @@ fn parse_fn_decl(tokens: &mut VecDeque<Token>) -> Statement {
             match tokens.pop_front() {
                 Some(Token::Id(name)) => {
                     p_names.push(name);
+                    expect_id = false;
                 }
                 Some(Token::RightParen) => break,
                 _ => panic!("Parse error: after a left paren or a comma, arg list must have an id or a right paren"),
             }
         } else {
             match tokens.pop_front() {
-                Some(Token::Comma) => continue,
+                Some(Token::Comma) => {
+                    expect_id = true;
+                    continue
+                }
                 Some(Token::RightParen) => break,
                 _ => panic!("Parse error: expecting a comma in arg list, has to be either a comma or a right paren"),
             }
@@ -128,7 +132,7 @@ fn parse_rvalue(tokens: &mut VecDeque<Token>) -> Expression {
     let initial = match tokens.pop_front() {
         Some(Token::IntLiteral(val)) => Expression::Int { value: val },
         Some(Token::Id(name)) => parse_id_expr(name, tokens),
-        _ => unimplemented!(),
+        x @ _ => unimplemented!("Parse error: {:?} cannot be rvalue-initial", x),
     };
 
     // a smarter version of this would allow for nested assignments
@@ -153,11 +157,27 @@ fn parse_id_expr(name: String, tokens: &mut VecDeque<Token>) -> Expression {
             next_tok_is(tokens, Token::LeftParen);
 
             let mut params = Vec::new();
+            let mut expect_expr = true;
             loop {
-                match tokens.front() {
-                    Some(&Token::RightParen) => break,
-                    _ => params.push(Box::new(parse_expression(tokens))),
-                };
+                if (expect_expr) {
+                    match tokens.front() {
+                        Some(&Token::RightParen) => break,
+                        _ => {
+                            expect_expr = false;
+                            params.push(Box::new(parse_expression(tokens)))
+                        }
+                    }
+                } else {
+                    match tokens.front() {
+                        Some(&Token::RightParen) => break,
+                        Some(&Token::Comma) => {
+                            expect_expr = true;
+                            tokens.pop_front();
+                            continue;
+                        }
+                        x => panic!("Parse error: {:?} is not a comma or a right paren", x),
+                    }
+                }
             }
 
             next_tok_is(tokens, Token::RightParen);
@@ -481,6 +501,7 @@ mod tests {
             Token::Id("abc".to_string()),
             Token::LeftParen,
             Token::IntLiteral(5),
+            Token::Comma,
             Token::Id("def".to_string()),
             Token::RightParen,
         ]);
@@ -532,6 +553,7 @@ mod tests {
             Token::Id("abc".to_string()),
             Token::LeftParen,
             Token::IntLiteral(5),
+            Token::Comma,
             Token::Id("def".to_string()),
             Token::RightParen,
             Token::Semicolon,
