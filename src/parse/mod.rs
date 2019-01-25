@@ -60,23 +60,44 @@ fn parse_fn_decl(tokens: &mut VecDeque<Token>) -> Statement {
     next_tok_is(tokens, Token::Fn);
 
     let name = match tokens.pop_front() {
-        Some(&Token::Id(name)) => name,
+        Some(Token::Id(name)) => name,
         _ => panic!("Parse error: Function decl needs a function id"),
-    }
+    };
 
     next_tok_is(tokens, Token::LeftParen);
 
-    let p_names = Vec::new();
+    let mut p_names = Vec::new();
+    let mut expect_id = false;
     loop {
-        match tokens.pop_front() {
-            Some(Token::Id(n)) => p_names.push(n),
-            Some(Token::Comma) => continue,
-            Some(Token::RightParen) => break
-        };
+        if expect_id {
+            match tokens.pop_front() {
+                Some(Token::Id(name)) => {
+                    p_names.push(name);
+                }
+                Some(Token::RightParen) => break,
+                _ => panic!("Parse error: after a left paren or a comma, arg list must have an id or a right paren"),
+            }
+        } else {
+            match tokens.pop_front() {
+                Some(Token::Comma) => continue,
+                Some(Token::RightParen) => break,
+                _ => panic!("Parse error: expecting a comma in arg list, has to be either a comma or a right paren"),
+            }
+        }
     }
-    //// next_tok_is(tokens, Token::RightParen);
+
+    let block = parse_statement(tokens); // this means that fn abc(); is a valid no-op function
+
+    Statement::FuncDecl {
+        name: name,
+        params: p_names,
+        block: Box::new(block),
+    }
 }
 
+fn parse_if(tokens: &mut VecDeque<Token>) -> Statement {
+    unimplemented!();
+}
 // must return -- panics if it has to
 fn parse_expression(tokens: &mut VecDeque<Token>) -> Expression {
     match tokens.get(1) {
@@ -475,6 +496,67 @@ mod tests {
                         name: "def".to_string()
                     })
                 ]
+            }
+        );
+    }
+
+    #[test]
+    fn it_gets_an_empty_fn_decl() {
+        let mut toks = VecDeque::from(vec![
+            Token::Fn,
+            Token::Id("abc".to_string()),
+            Token::LeftParen,
+            Token::RightParen,
+            Token::Semicolon,
+        ]);
+        let results = parse_statement(&mut toks);
+
+        assert_eq!(
+            results,
+            Statement::FuncDecl {
+                name: "abc".to_string(),
+                params: vec![],
+                block: Box::new(Statement::NoOp),
+            }
+        );
+    }
+
+    #[test]
+    fn it_gets_a_real_fn_decl() {
+        let mut toks = VecDeque::from(vec![
+            Token::Fn,
+            Token::Id("abc".to_string()),
+            Token::LeftParen,
+            Token::RightParen,
+            Token::LeftBrace,
+            Token::Id("abc".to_string()),
+            Token::LeftParen,
+            Token::IntLiteral(5),
+            Token::Id("def".to_string()),
+            Token::RightParen,
+            Token::Semicolon,
+            Token::RightBrace,
+        ]);
+        let results = parse_statement(&mut toks);
+
+        assert_eq!(
+            results,
+            Statement::FuncDecl {
+                name: "abc".to_string(),
+                params: vec![],
+                block: Box::new(Statement::Block {
+                    code: vec![Statement::Expression {
+                        expression: Box::new(Expression::FunctionCall {
+                            func: "abc".to_string(),
+                            params: vec![
+                                Box::new(Expression::Int { value: 5 }),
+                                Box::new(Expression::Variable {
+                                    name: "def".to_string()
+                                })
+                            ],
+                        })
+                    }]
+                }),
             }
         );
     }
