@@ -46,6 +46,11 @@ pub enum Statement {
     Block {
         code: Vec<Statement>,
     },
+    FuncDecl {
+        name: String,
+        params: Vec<String>,
+        block: Box<Statement>,
+    },
     NoOp,
     // func decl
 }

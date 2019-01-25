@@ -14,6 +14,8 @@ fn parse_statement(tokens: &mut VecDeque<Token>) -> Statement {
     match tokens.front() {
         Some(&Token::Id(_)) => parse_statement_expr(tokens),
         Some(&Token::LeftBrace) => parse_block(tokens),
+        Some(&Token::If) => parse_if(tokens),
+        Some(&Token::Fn) => parse_fn_decl(tokens),
         Some(&Token::Semicolon) => {
             tokens.pop_front();
             Statement::NoOp
@@ -52,6 +54,27 @@ fn parse_series(tokens: &mut VecDeque<Token>) -> Vec<Statement> {
         };
     }
     statements
+}
+
+fn parse_fn_decl(tokens: &mut VecDeque<Token>) -> Statement {
+    next_tok_is(tokens, Token::Fn);
+
+    let name = match tokens.pop_front() {
+        Some(&Token::Id(name)) => name,
+        _ => panic!("Parse error: Function decl needs a function id"),
+    }
+
+    next_tok_is(tokens, Token::LeftParen);
+
+    let p_names = Vec::new();
+    loop {
+        match tokens.pop_front() {
+            Some(Token::Id(n)) => p_names.push(n),
+            Some(Token::Comma) => continue,
+            Some(Token::RightParen) => break
+        };
+    }
+    //// next_tok_is(tokens, Token::RightParen);
 }
 
 // must return -- panics if it has to
