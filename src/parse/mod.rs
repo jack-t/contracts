@@ -51,7 +51,7 @@ fn parse_series(tokens: &mut VecDeque<Token>) -> Vec<Statement> {
         match tokens.front() {
             Some(&Token::RightBrace) => break,
             _ => statements.push(parse_statement(tokens)),
-        };
+        }
     }
     statements
 }
@@ -100,7 +100,28 @@ fn parse_fn_decl(tokens: &mut VecDeque<Token>) -> Statement {
 }
 
 fn parse_if(tokens: &mut VecDeque<Token>) -> Statement {
-    unimplemented!();
+    next_tok_is(tokens, Token::If);
+    next_tok_is(tokens, Token::LeftParen);
+
+    let condition = Box::new(parse_expression(tokens));
+
+    next_tok_is(tokens, Token::RightParen);
+
+    let true_statement = Box::new(parse_statement(tokens));
+
+    let false_statement = match tokens.front() {
+        Some(&Token::Else) => {
+            tokens.pop_front();
+            Some(Box::new(parse_statement(tokens)))
+        }
+        _ => None,
+    };
+
+    Statement::Conditional {
+        condition,
+        true_statement,
+        false_statement,
+    }
 }
 // must return -- panics if it has to
 fn parse_expression(tokens: &mut VecDeque<Token>) -> Expression {
@@ -579,6 +600,59 @@ mod tests {
                         })
                     }]
                 }),
+            }
+        );
+    }
+
+    #[test]
+    fn it_gets_an_if() {
+        let mut toks = VecDeque::from(vec![
+            Token::If,
+            Token::LeftParen,
+            Token::Id("abc".to_string()),
+            Token::RightParen,
+            Token::Semicolon,
+        ]);
+        let results = parse(toks);
+
+        assert_eq!(
+            results,
+            Statement::Block {
+                code: vec![Statement::Conditional {
+                    condition: Box::new(Expression::Variable {
+                        name: "abc".to_string()
+                    }),
+                    true_statement: Box::new(Statement::NoOp),
+                    false_statement: None,
+                }]
+            }
+        );
+    }
+    #[test]
+    fn it_gets_an_else() {
+        let mut toks = VecDeque::from(vec![
+            Token::If,
+            Token::LeftParen,
+            Token::Id("abc".to_string()),
+            Token::RightParen,
+            Token::LeftBrace,
+            Token::RightBrace,
+            Token::Else,
+            Token::LeftBrace,
+            Token::RightBrace,
+        ]);
+        let results = parse(toks);
+
+        assert_eq!(
+            results,
+            Statement::Block {
+                code: vec![Statement::Conditional {
+                    condition: Box::new(Expression::Variable {
+                        name: "abc".to_string()
+                    }),
+                    true_statement: Box::new(Statement::Block { code: vec![] }),
+                    false_statement: Some(Box::new(Statement::Block { code: vec![] })),
+                }]
             }
         );
     }
